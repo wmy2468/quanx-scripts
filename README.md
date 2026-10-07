@@ -40,3 +40,32 @@ hostname = wapside.189.cn, %APPEND%
 - `telecom_export.js`：把存储里的抓包结果再捞一遍（通知被截断时用）；把顶部 `MODE` 改成 `clear` 可清空重抓
 - 只读不改，`sign`/`timestamp` 原样保留；重放有效期有限，抓完尽快用
 
+#### 收不到通知时的排查三件套
+
+按顺序做，能快速定位是哪一环断了。
+
+**① 通知链路自检** —— 加进 `[task_local]`，5 分钟后看有没有通知：
+
+```
+[task_local]
+*/5 * * * * https://gh-proxy.com/https://raw.githubusercontent.com/wmy2468/quanx-scripts/main/telecom_selftest.js, tag=QX自检, enabled=true
+```
+
+- 收到 → QX 在跑、通知正常 → 往下查 ②③
+- 没收到 → QX 没在运行（首页 VPN 开关没开）或通知权限被关，先修这个
+
+**② MITM 自检** —— QX 首页确认 MITM 开关是打开的；设置 → 通用 → 关于本机 → 证书信任设置 → 打开 QX 证书的完全信任。MITM 没生效的话，所有重写脚本都不会触发。
+
+**③ 流量诊断** —— 换成诊断脚本，看电信流量到底有没有经过 QX：
+
+```
+[rewrite_local]
+^https?:\/\/[a-zA-Z0-9.-]*189\.cn.* url script-request-header https://gh-proxy.com/https://raw.githubusercontent.com/wmy2468/quanx-scripts/main/telecom_diag.js
+
+[mitm]
+hostname = *.189.cn, %APPEND%
+```
+
+点一次签到：只要弹了通知，就说明 MITM 正常、且能看出真实域名/路径（再据此修正 capture 的匹配规则）；一条都不弹 → 回到 ② 继续查。
+
+
